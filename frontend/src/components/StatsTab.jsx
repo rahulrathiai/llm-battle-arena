@@ -26,14 +26,18 @@ function StatsTab() {
     }
   }
 
-  const getModelDisplayName = (model) => {
+  const getModelDisplayName = (entry) => {
+    // Use model_display from API if available, otherwise fallback to generic names
+    if (entry.model_display) {
+      return entry.model_display
+    }
     const names = {
       openai: 'OpenAI',
       anthropic: 'Claude',
       google: 'Gemini',
       grok: 'Grok'
     }
-    return names[model] || model
+    return names[entry.model] || entry.model
   }
 
   if (loading) {
@@ -104,7 +108,7 @@ function StatsTab() {
                 <td className="rank">
                   {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
                 </td>
-                <td className="model-name">{getModelDisplayName(entry.model)}</td>
+                <td className="model-name">{getModelDisplayName(entry)}</td>
                 <td className="wins">{entry.wins}</td>
                 <td className="win-rate">{entry.win_rate}%</td>
                 <td className="avg-score">

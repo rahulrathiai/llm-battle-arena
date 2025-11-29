@@ -31,6 +31,7 @@ app.add_middleware(
 # Pydantic models
 class BattleRequest(BaseModel):
     prompt: str
+    conversation_history: Optional[List[Dict[str, str]]] = None  # List of {role, content} messages
 
 
 class BattleResponse(BaseModel):
@@ -58,8 +59,8 @@ async def create_battle(
 ):
     """Run a battle and save results"""
     try:
-        # Run the battle
-        results = await run_battle(request.prompt)
+        # Run the battle with conversation history for context awareness
+        results = await run_battle(request.prompt, conversation_history=request.conversation_history)
         
         # Save to database
         battle = Battle(prompt=request.prompt, created_at=datetime.utcnow())
@@ -278,8 +279,11 @@ async def get_stats(db: AsyncSession = Depends(database.get_db)):
     
     leaderboard = []
     for model in all_models:
+        # Get actual model name from config
+        model_display = get_model_display_name(model)
         leaderboard.append({
             "model": model,
+            "model_display": model_display,
             "wins": wins.get(model, 0),
             "average_score": round(avg_scores.get(model, 0.0), 2),
             "win_rate": round((wins.get(model, 0) / total_battles * 100) if total_battles > 0 else 0, 2)

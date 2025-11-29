@@ -177,12 +177,18 @@ def extract_score(text: str) -> Optional[float]:
     return None
 
 
-async def run_battle(prompt: str) -> Dict:
+async def run_battle(prompt: str, conversation_history: Optional[list] = None) -> Dict:
     """
     Run a complete battle:
-    1. Get responses from all 4 LLMs
+    1. Get responses from all 4 LLMs (with conversation history)
     2. Have each LLM rate all responses
     3. Aggregate scores and determine winner
+    
+    Args:
+        prompt: The current user prompt
+        conversation_history: Optional list of previous messages in format 
+                             [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
+                             Only winning responses should be included as assistant messages
     """
     start_time = time.time()
     timing_info = {}
@@ -195,13 +201,17 @@ async def run_battle(prompt: str) -> Dict:
         # Retry once if the first attempt fails
         for attempt in range(2):
             try:
-                response_text = await client.generate(prompt)
+                # Pass conversation history to enable context awareness
+                response_text = await client.generate(prompt, conversation_history=conversation_history)
                 call_duration = time.time() - call_start
                 if attempt > 0:
                     print(f"✅ {client_name} response succeeded on retry ({call_duration:.2f}s)")
                 else:
                     print(f"⏱️  {client_name} response: {call_duration:.2f}s")
                 return client_name, response_text, call_duration
+            except asyncio.CancelledError:
+                # Re-raise cancelled errors - they indicate task cancellation and should propagate
+                raise
             except Exception as e:
                 last_error = e
                 call_duration = time.time() - call_start
@@ -292,6 +302,9 @@ Respond with a JSON object in this exact format:
                 else:
                     print(f"⏱️  {client_name} rating: {call_duration:.2f}s")
                 return client_name, rating_response, call_duration
+            except asyncio.CancelledError:
+                # Re-raise cancelled errors - they indicate task cancellation and should propagate
+                raise
             except Exception as e:
                 last_error = e
                 call_duration = time.time() - call_start

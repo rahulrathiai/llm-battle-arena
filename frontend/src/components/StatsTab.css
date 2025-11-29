@@ -1,6 +1,8 @@
 .stats-tab {
   max-width: 1000px;
   margin: 0 auto;
+  color: var(--text-primary);
+  transition: color 0.3s ease;
 }
 
 .stats-header {
@@ -13,7 +15,7 @@
 }
 
 .stats-tab h2 {
-  color: #333;
+  color: var(--text-heading);
   margin: 0;
   font-size: 2rem;
 }
@@ -48,13 +50,13 @@
 }
 
 .stat-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--user-message-bg);
   color: white;
   padding: 30px;
   border-radius: 12px;
   text-align: center;
   min-width: 200px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px var(--shadow-hover);
 }
 
 .stat-value {
@@ -69,13 +71,14 @@
 }
 
 .leaderboard-section {
-  background: #f9f9f9;
+  background: var(--bg-leaderboard);
   padding: 30px;
   border-radius: 12px;
+  transition: background 0.3s ease;
 }
 
 .leaderboard-section h3 {
-  color: #333;
+  color: var(--text-heading);
   margin-bottom: 20px;
   font-size: 1.5rem;
 }
@@ -83,14 +86,14 @@
 .leaderboard-table {
   width: 100%;
   border-collapse: collapse;
-  background: white;
+  background: var(--bg-secondary);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px var(--shadow);
 }
 
 .leaderboard-table thead {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--user-message-bg);
   color: white;
 }
 
@@ -102,22 +105,22 @@
 }
 
 .leaderboard-table tbody tr {
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border-light);
   transition: background 0.2s;
 }
 
 .leaderboard-table tbody tr:hover {
-  background: #f5f5f5;
+  background: var(--bg-table-row-hover);
 }
 
 .leaderboard-table tbody tr.first-place {
-  background: linear-gradient(135deg, #fff9e6 0%, #ffffff 100%);
+  background: var(--bg-first-place);
   font-weight: 600;
 }
 
 .leaderboard-table td {
   padding: 15px;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .rank {
@@ -136,12 +139,12 @@
   text-align: center;
   font-size: 1.2rem;
   font-weight: 600;
-  color: #4caf50;
+  color: var(--success-color);
 }
 
 .win-rate {
   text-align: center;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .avg-score {
@@ -157,13 +160,13 @@
 .score-bar-container span {
   font-weight: 600;
   min-width: 50px;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .score-bar {
   flex: 1;
   height: 24px;
-  background: #e0e0e0;
+  background: var(--border-light);
   border-radius: 12px;
   overflow: hidden;
   position: relative;
@@ -179,19 +182,18 @@
 .no-data {
   text-align: center;
   padding: 40px;
-  color: #999;
+  color: var(--text-tertiary);
   font-style: italic;
 }
 
 .loading, .error {
   text-align: center;
   padding: 40px;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .error {
-  color: #c33;
-  background: #fee;
+  color: var(--error-text);
+  background: var(--error-bg);
   border-radius: 8px;
 }
-

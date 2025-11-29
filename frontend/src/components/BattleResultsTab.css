@@ -1,10 +1,12 @@
 .battle-results-tab {
   max-width: 1200px;
   margin: 0 auto;
+  color: var(--text-primary);
+  transition: color 0.3s ease;
 }
 
 .battle-results-tab h2 {
-  color: #333;
+  color: var(--text-heading);
   margin-bottom: 20px;
   font-size: 2rem;
 }
@@ -12,27 +14,36 @@
 .battle-selector {
   margin-bottom: 30px;
   padding: 15px;
-  background: #f5f5f5;
+  background: var(--bg-selector);
   border-radius: 8px;
   display: flex;
   align-items: center;
   gap: 15px;
   flex-wrap: wrap;
+  transition: background 0.3s ease;
 }
 
 .battle-selector label {
   font-weight: 600;
-  color: #333;
+  color: var(--text-heading);
 }
 
 .battle-selector select {
   padding: 8px 15px;
-  border: 2px solid #e0e0e0;
+  border: 2px solid var(--border-light);
   border-radius: 6px;
   font-size: 1rem;
   min-width: 300px;
   max-width: 100%;
   flex: 1;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  transition: all 0.3s ease;
+}
+
+.battle-selector select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .delete-battle-button {
@@ -60,17 +71,18 @@
 }
 
 .tiebreaker-info {
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-  border: 2px solid #f59e0b;
+  background: var(--warning-bg);
+  border: 2px solid var(--warning-border);
   border-radius: 8px;
   padding: 12px 16px;
   margin-bottom: 20px;
-  color: #92400e;
+  color: var(--warning-text);
   font-size: 0.95rem;
+  transition: all 0.3s ease;
 }
 
 .tiebreaker-info strong {
-  color: #78350f;
+  color: var(--warning-text);
 }
 
 .tiebreaker-method {
@@ -82,50 +94,51 @@
 .prompt-section {
   margin-bottom: 30px;
   padding: 20px;
-  background: #f0f4ff;
+  background: var(--bg-prompt-section);
   border-radius: 8px;
-  border-left: 4px solid #667eea;
+  border-left: 4px solid var(--accent);
+  transition: background 0.3s ease;
 }
 
 .prompt-section h3 {
-  color: #333;
+  color: var(--text-heading);
   margin-bottom: 10px;
   font-size: 1.3rem;
 }
 
 .prompt-text {
-  color: #555;
+  color: var(--text-primary);
   line-height: 1.6;
   white-space: pre-wrap;
   word-wrap: break-word;
 }
 
 .responses-section h3 {
-  color: #333;
+  color: var(--text-heading);
   margin-bottom: 20px;
   font-size: 1.5rem;
 }
 
 .response-card {
-  background: #fff;
-  border: 2px solid #e5e7eb;
+  background: var(--bg-card);
+  border: 2px solid var(--border-color);
   border-radius: 16px;
   padding: 24px;
   margin-bottom: 24px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px var(--shadow);
 }
 
 .response-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  border-color: #d1d5db;
+  box-shadow: 0 8px 24px var(--shadow-hover);
+  border-color: var(--border-color);
 }
 
 .response-card.winner {
-  border: 3px solid #10b981;
-  background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 100%);
+  border: 3px solid var(--success-color);
+  background: var(--bg-winner-card);
   box-shadow: 0 8px 32px rgba(16, 185, 129, 0.2);
 }
 
@@ -160,7 +173,7 @@
 }
 
 .response-header h4 {
-  color: #333;
+  color: var(--text-heading);
   font-size: 1.3rem;
   margin: 0;
   display: flex;
@@ -169,34 +182,35 @@
 }
 
 .winner-text {
-  color: #4caf50;
+  color: var(--success-color);
   font-weight: 700;
   font-size: 0.9em;
 }
 
 .score {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--user-message-bg);
   color: white;
   padding: 10px 20px;
   border-radius: 12px;
   font-weight: 700;
   font-size: 1rem;
   white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 12px var(--shadow);
 }
 
 .ratings-breakdown {
   margin-bottom: 20px;
   padding: 16px;
-  background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+  background: var(--bg-ratings-breakdown);
   border-radius: 12px;
-  border-left: 4px solid #667eea;
+  border-left: 4px solid var(--accent);
+  transition: background 0.3s ease;
 }
 
 .ratings-breakdown strong {
   display: block;
   margin-bottom: 12px;
-  color: #374151;
+  color: var(--text-primary);
   font-size: 0.95rem;
 }
 
@@ -207,17 +221,17 @@
 }
 
 .rating-item {
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: var(--bg-rating-item);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   padding: 12px;
   transition: all 0.2s;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 2px var(--shadow);
 }
 
 .rating-item:hover {
-  border-color: #667eea;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px var(--shadow);
 }
 
 .rating-header {
@@ -226,17 +240,17 @@
 
 .rating-badge {
   display: inline-block;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--user-message-bg);
   color: white;
   padding: 6px 12px;
   border-radius: 6px;
   font-size: 0.9rem;
   font-weight: 600;
-  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+  box-shadow: 0 2px 4px var(--shadow);
 }
 
 .rating-reasoning {
-  color: #6b7280;
+  color: var(--text-secondary);
   font-size: 0.9rem;
   line-height: 1.5;
   font-style: italic;
@@ -244,7 +258,7 @@
 }
 
 .response-text {
-  color: #374151;
+  color: var(--text-primary);
   line-height: 1.7;
   margin-top: 10px;
 }
@@ -255,7 +269,7 @@
 .response-text h4,
 .response-text h5,
 .response-text h6 {
-  color: #1f2937;
+  color: var(--text-primary);
   font-weight: 700;
   margin-top: 1.5em;
   margin-bottom: 0.5em;
@@ -282,16 +296,16 @@
 }
 
 .response-text code {
-  background: #f3f4f6;
+  background: var(--code-bg);
   padding: 0.2em 0.4em;
   border-radius: 4px;
   font-family: 'Courier New', monospace;
   font-size: 0.9em;
-  color: #e11d48;
+  color: var(--error-text);
 }
 
 .response-text pre {
-  background: #1f2937;
+  background: var(--code-dark-bg);
   color: #f9fafb;
   padding: 1em;
   border-radius: 8px;
@@ -307,16 +321,16 @@
 }
 
 .response-text blockquote {
-  border-left: 4px solid #667eea;
+  border-left: 4px solid var(--accent);
   padding-left: 1em;
   margin: 1em 0;
-  color: #6b7280;
+  color: var(--text-secondary);
   font-style: italic;
 }
 
 .response-text strong {
   font-weight: 700;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .response-text em {
@@ -324,7 +338,7 @@
 }
 
 .response-text a {
-  color: #667eea;
+  color: var(--accent);
   text-decoration: none;
 }
 
@@ -340,19 +354,18 @@
 
 .response-text th,
 .response-text td {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-color);
   padding: 0.5em 1em;
   text-align: left;
 }
 
 .response-text th {
-  background: #f9fafb;
+  background: var(--bg-tertiary);
   font-weight: 600;
 }
 
 .loading {
   text-align: center;
   padding: 20px;
-  color: #666;
+  color: var(--text-secondary);
 }
-

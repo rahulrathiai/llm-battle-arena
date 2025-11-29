@@ -11,7 +11,7 @@ from anthropic import Anthropic
 class LLMClient:
     """Base class for LLM clients"""
     
-    async def generate(self, prompt: str, json_mode: bool = False) -> str:
+    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None) -> str:
         raise NotImplementedError
 
 
@@ -20,11 +20,18 @@ class OpenAIClient(LLMClient):
         self.client = OpenAI(api_key=settings.openai_api_key)
         self.model = settings.openai_model
     
-    async def generate(self, prompt: str, json_mode: bool = False) -> str:
+    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None) -> str:
         try:
+            # Build messages array from conversation history + current prompt
+            messages = []
+            if conversation_history:
+                # Convert history to OpenAI format (already in correct format)
+                messages.extend(conversation_history)
+            messages.append({"role": "user", "content": prompt})
+            
             params = {
                 "model": self.model,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": messages,
                 "temperature": 0.7
             }
             if json_mode:
@@ -47,11 +54,18 @@ class AnthropicClient(LLMClient):
         self.client = Anthropic(api_key=settings.anthropic_api_key)
         self.model = settings.anthropic_model
     
-    async def generate(self, prompt: str, json_mode: bool = False) -> str:
+    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None) -> str:
+        # Build messages array from conversation history + current prompt
+        messages = []
+        if conversation_history:
+            # Convert history to Anthropic format (already in correct format)
+            messages.extend(conversation_history)
+        messages.append({"role": "user", "content": prompt})
+        
         params = {
             "model": self.model,
             "max_tokens": 4096,
-            "messages": [{"role": "user", "content": prompt}]
+            "messages": messages
         }
         if json_mode:
             # Anthropic uses structured outputs - enforce JSON schema
@@ -71,7 +85,7 @@ class GoogleClient(LLMClient):
         except Exception as e:
             raise Exception(f"Failed to initialize Gemini model '{self.model_name}': {str(e)}")
     
-    async def generate(self, prompt: str, json_mode: bool = False) -> str:
+    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None) -> str:
         try:
             generation_config = {}
             if json_mode:
@@ -79,12 +93,32 @@ class GoogleClient(LLMClient):
                 generation_config = {
                     "response_mime_type": "application/json"
                 }
-            # Run synchronous Google call in thread pool to allow true async
-            response = await asyncio.to_thread(
-                self.model.generate_content, 
-                prompt, 
-                generation_config=generation_config if generation_config else None
-            )
+            
+            # Build conversation history for Google Gemini
+            # Gemini uses a chat session with history
+            if conversation_history and len(conversation_history) > 0:
+                # Build history: list of dicts with role and parts
+                history = []
+                for msg in conversation_history:
+                    role = "user" if msg["role"] == "user" else "model"
+                    history.append({
+                        "role": role,
+                        "parts": [msg["content"]]
+                    })
+                
+                # Create a chat session with history
+                # start_chat accepts history as a list of message dicts
+                chat = self.model.start_chat(history=history)
+                # Send current prompt
+                response = await asyncio.to_thread(chat.send_message, prompt)
+            else:
+                # No history - use direct generate_content
+                # Run synchronous Google call in thread pool to allow true async
+                response = await asyncio.to_thread(
+                    self.model.generate_content, 
+                    prompt, 
+                    generation_config=generation_config if generation_config else None
+                )
             return response.text
         except Exception as e:
             error_msg = str(e)
@@ -99,13 +133,20 @@ class GrokClient(LLMClient):
         self.model = settings.grok_model
         self.base_url = "https://api.x.ai/v1"
     
-    async def generate(self, prompt: str, json_mode: bool = False) -> str:
+    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None) -> str:
         async with httpx.AsyncClient() as client:
             # Try the configured model first
             try:
+                # Build messages array from conversation history + current prompt
+                messages = []
+                if conversation_history:
+                    # Convert history to Grok format (already in correct format)
+                    messages.extend(conversation_history)
+                messages.append({"role": "user", "content": prompt})
+                
                 payload = {
                     "model": self.model,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": messages,
                     "temperature": 0.7
                 }
                 if json_mode:
