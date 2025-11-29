@@ -142,6 +142,39 @@ async def create_battle(
         raise HTTPException(status_code=500, detail=f"Battle failed: {str(e)}")
 
 
+@app.delete("/api/battle/{battle_id}")
+async def delete_battle(
+    battle_id: int,
+    db: AsyncSession = Depends(database.get_db)
+):
+    """Delete a specific battle and all its associated data"""
+    try:
+        from sqlalchemy import delete
+        # Check if battle exists
+        result = await db.execute(
+            select(Battle).where(Battle.id == battle_id)
+        )
+        battle = result.scalar_one_or_none()
+        
+        if not battle:
+            raise HTTPException(status_code=404, detail="Battle not found")
+        
+        # Delete ratings first (they reference responses)
+        await db.execute(delete(Rating).where(Rating.battle_id == battle_id))
+        # Delete responses (they reference battles)
+        await db.execute(delete(Response).where(Response.battle_id == battle_id))
+        # Finally delete the battle
+        await db.execute(delete(Battle).where(Battle.id == battle_id))
+        await db.commit()
+        
+        return {"message": f"Battle {battle_id} deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete battle: {str(e)}")
+
+
 @app.get("/api/battle/{battle_id}")
 async def get_battle(
     battle_id: int,

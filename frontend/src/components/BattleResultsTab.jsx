@@ -4,22 +4,20 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import './BattleResultsTab.css'
 
-function BattleResultsTab({ battle, battles }) {
+function BattleResultsTab({ battle, battles, onBattleDeleted }) {
   const [selectedBattle, setSelectedBattle] = useState(battle)
   const [allBattles, setAllBattles] = useState([])
   const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    setSelectedBattle(battle)
-    loadBattles()
-  }, [battle])
+  const [deleting, setDeleting] = useState(false)
 
   const loadBattles = async () => {
     try {
       const response = await axios.get('/api/battles')
       setAllBattles(response.data)
+      return response.data
     } catch (err) {
       console.error('Failed to load battles:', err)
+      return []
     }
   }
 
@@ -37,6 +35,73 @@ function BattleResultsTab({ battle, battles }) {
     }
   }
 
+  // Load battles on mount and select the most recent one
+  useEffect(() => {
+    const initializeBattles = async () => {
+      // Always load the battles list
+      const battlesList = await loadBattles()
+      
+      // If we have battles, select the first (most recent) one
+      // This ensures we always show data when navigating to this tab
+      if (battlesList.length > 0) {
+        // Only load if we don't already have this battle selected, or if battle prop is provided
+        if (battle) {
+          setSelectedBattle(battle)
+        } else {
+          // Select the first battle
+          await handleBattleSelect(battlesList[0].id)
+        }
+      }
+    }
+    
+    initializeBattles()
+  }, []) // Run on mount only
+
+  // Update when battle prop changes (e.g., after a new battle is created)
+  useEffect(() => {
+    if (battle) {
+      setSelectedBattle(battle)
+      loadBattles() // Reload battles list too
+    }
+  }, [battle])
+
+  const handleDeleteBattle = async (battleId) => {
+    if (!window.confirm(`Are you sure you want to delete Battle #${battleId}? This action cannot be undone.`)) {
+      return
+    }
+    
+    setDeleting(true)
+    try {
+      await axios.delete(`/api/battle/${battleId}`)
+      
+      // Reload battles list to get the updated list
+      const updatedBattlesResponse = await axios.get('/api/battles')
+      const updatedBattles = updatedBattlesResponse.data
+      setAllBattles(updatedBattles)
+      
+      // If we deleted the currently selected battle, clear it or select another
+      if (selectedBattle?.id === battleId) {
+        if (updatedBattles.length > 0) {
+          // Select the first available battle
+          await handleBattleSelect(updatedBattles[0].id)
+        } else {
+          setSelectedBattle(null)
+        }
+      }
+      
+      // Notify parent component to refresh stats
+      if (onBattleDeleted) {
+        onBattleDeleted()
+      }
+      
+      alert('Battle deleted successfully!')
+    } catch (err) {
+      alert('Failed to delete battle: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const getModelDisplayName = (model) => {
     const names = {
       openai: 'OpenAI',
@@ -47,7 +112,18 @@ function BattleResultsTab({ battle, battles }) {
     return names[model] || model
   }
 
-  if (!selectedBattle) {
+  // Show loading state while initializing
+  if (loading && !selectedBattle && allBattles.length === 0) {
+    return (
+      <div className="battle-results-tab">
+        <h2>Battle Results</h2>
+        <div className="loading">Loading battles...</div>
+      </div>
+    )
+  }
+
+  // Show empty state if no battles exist
+  if (!selectedBattle && allBattles.length === 0) {
     return (
       <div className="battle-results-tab">
         <h2>Battle Results</h2>
@@ -74,6 +150,16 @@ function BattleResultsTab({ battle, battles }) {
               </option>
             ))}
           </select>
+          {selectedBattle && (
+            <button
+              className="delete-battle-button"
+              onClick={() => handleDeleteBattle(selectedBattle.id)}
+              disabled={deleting || loading}
+              title="Delete this battle"
+            >
+              {deleting ? 'Deleting...' : '🗑️ Delete'}
+            </button>
+          )}
         </div>
       )}
 
@@ -145,4 +231,3 @@ function BattleResultsTab({ battle, battles }) {
 }
 
 export default BattleResultsTab
-

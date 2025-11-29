@@ -8,6 +8,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('chat')
   const [currentBattle, setCurrentBattle] = useState(null)
   const [battles, setBattles] = useState([])
+  const [statsRefreshKey, setStatsRefreshKey] = useState(0)
 
   const tabs = [
     { id: 'chat', label: 'Chat' },
@@ -45,9 +46,21 @@ function App() {
           />
         )}
         {activeTab === 'results' && (
-          <BattleResultsTab battle={currentBattle} battles={battles} />
+          <BattleResultsTab 
+            key="battle-results" 
+            battle={currentBattle} 
+            battles={battles}
+            onBattleDeleted={() => {
+              // Refresh stats when a battle is deleted
+              setStatsRefreshKey(prev => prev + 1)
+              // Update battles list
+              setBattles([])
+              // Clear current battle if it was deleted
+              setCurrentBattle(null)
+            }}
+          />
         )}
-        {activeTab === 'stats' && <StatsTab />}
+        {activeTab === 'stats' && <StatsTab key={statsRefreshKey} />}
       </div>
     </div>
   )
