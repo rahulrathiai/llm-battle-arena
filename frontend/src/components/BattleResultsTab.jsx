@@ -112,6 +112,16 @@ function BattleResultsTab({ battle, battles, onBattleDeleted }) {
     return names[model] || model
   }
 
+  const formatTiebreakerMethod = (method) => {
+    const methods = {
+      'max_score': 'Highest Maximum Score',
+      'lowest_variance': 'Most Consistent (Lowest Variance)',
+      'head_to_head': 'Head-to-Head Comparison',
+      'alphabetical_fallback': 'Alphabetical Order (Perfect Tie)'
+    }
+    return methods[method] || method
+  }
+
   // Show loading state while initializing
   if (loading && !selectedBattle && allBattles.length === 0) {
     return (
@@ -171,6 +181,17 @@ function BattleResultsTab({ battle, battles, onBattleDeleted }) {
             <h3>Original Prompt:</h3>
             <p className="prompt-text">{selectedBattle.prompt}</p>
           </div>
+
+          {selectedBattle.tiebreaker_info?.tie_occurred && (
+            <div className="tiebreaker-info">
+              <strong>⚔️ Tie Detected!</strong> Multiple models achieved the same average score.
+              {selectedBattle.tiebreaker_info.method !== 'average_score' && (
+                <span className="tiebreaker-method">
+                  {' '}Winner determined by: <strong>{formatTiebreakerMethod(selectedBattle.tiebreaker_info.method)}</strong>
+                </span>
+              )}
+            </div>
+          )}
 
           <div className="responses-section">
             <h3>Responses (Ranked by Score):</h3>

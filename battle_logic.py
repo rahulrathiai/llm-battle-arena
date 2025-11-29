@@ -2,8 +2,144 @@ import re
 import json
 import asyncio
 import time
-from typing import List, Dict, Tuple, Optional
+import statistics
+from typing import List, Dict, Tuple, Optional, Set
 from llm_clients import clients, model_names
+
+
+def determine_winner(
+    average_scores: Dict[str, float],
+    parsed_ratings: Dict[str, Dict[str, Dict]],
+    all_models: List[str]
+) -> Tuple[str, Dict]:
+    """
+    Determine winner with multi-level tiebreaker:
+    1. Highest average score
+    2. Highest maximum score (best single judge rating)
+    3. Lowest variance (most consistent)
+    4. Head-to-head comparison (most pairwise wins)
+    5. Declare multiple winners if still tied
+    """
+    tiebreaker_info = {
+        "method": "average_score",
+        "tie_occurred": False,
+        "tied_models": [],
+        "tiebreaker_levels_used": []
+    }
+    
+    # Find the highest average score
+    max_avg_score = max(average_scores.values())
+    tied_models = [model for model, score in average_scores.items() 
+                   if abs(score - max_avg_score) < 0.001]  # Float comparison tolerance
+    
+    # If no tie, return immediately
+    if len(tied_models) == 1:
+        return tied_models[0], tiebreaker_info
+    
+    tiebreaker_info["tie_occurred"] = True
+    tiebreaker_info["tied_models"] = tied_models.copy()
+    tiebreaker_info["tiebreaker_levels_used"].append("average_score")
+    
+    print(f"⚔️  Tie detected at {max_avg_score:.2f} average: {', '.join(tied_models)}")
+    
+    # Level 1: Highest maximum score (best single judge rating)
+    max_scores = {}
+    for model in tied_models:
+        scores = []
+        for judge in parsed_ratings.keys():
+            rating_data = parsed_ratings[judge].get(model, {})
+            if isinstance(rating_data, dict):
+                scores.append(rating_data.get("score", 0.0))
+            else:
+                scores.append(float(rating_data) if rating_data else 0.0)
+        max_scores[model] = max(scores) if scores else 0.0
+    
+    max_max_score = max(max_scores.values())
+    tied_models = [model for model in tied_models 
+                   if abs(max_scores[model] - max_max_score) < 0.001]
+    
+    if len(tied_models) == 1:
+        tiebreaker_info["method"] = "max_score"
+        tiebreaker_info["tiebreaker_levels_used"].append("max_score")
+        print(f"  ✅ Tiebreaker: Highest max score ({max_max_score:.2f}) - Winner: {tied_models[0]}")
+        return tied_models[0], tiebreaker_info
+    
+    tiebreaker_info["tiebreaker_levels_used"].append("max_score")
+    print(f"  ⚔️  Still tied after max score ({max_max_score:.2f}): {', '.join(tied_models)}")
+    
+    # Level 2: Lowest variance (most consistent)
+    variances = {}
+    for model in tied_models:
+        scores = []
+        for judge in parsed_ratings.keys():
+            rating_data = parsed_ratings[judge].get(model, {})
+            if isinstance(rating_data, dict):
+                scores.append(rating_data.get("score", 0.0))
+            else:
+                scores.append(float(rating_data) if rating_data else 0.0)
+        if len(scores) > 1:
+            try:
+                variances[model] = statistics.variance(scores)
+            except statistics.StatisticsError:
+                # If variance can't be calculated (e.g., all same values), use 0
+                variances[model] = 0.0
+        else:
+            variances[model] = 0.0
+    
+    min_variance = min(variances.values())
+    tied_models = [model for model in tied_models 
+                   if abs(variances[model] - min_variance) < 0.001]
+    
+    if len(tied_models) == 1:
+        tiebreaker_info["method"] = "lowest_variance"
+        tiebreaker_info["tiebreaker_levels_used"].append("lowest_variance")
+        print(f"  ✅ Tiebreaker: Lowest variance ({min_variance:.4f}) - Winner: {tied_models[0]}")
+        return tied_models[0], tiebreaker_info
+    
+    tiebreaker_info["tiebreaker_levels_used"].append("lowest_variance")
+    print(f"  ⚔️  Still tied after variance check: {', '.join(tied_models)}")
+    
+    # Level 3: Head-to-head comparison (count pairwise wins)
+    head_to_head_wins = {model: 0 for model in tied_models}
+    
+    for judge in parsed_ratings.keys():
+        judge_scores = {}
+        for model in tied_models:
+            rating_data = parsed_ratings[judge].get(model, {})
+            if isinstance(rating_data, dict):
+                judge_scores[model] = rating_data.get("score", 0.0)
+            else:
+                judge_scores[model] = float(rating_data) if rating_data else 0.0
+        
+        # Find the highest score for this judge among tied models
+        max_judge_score = max(judge_scores.values())
+        winners_for_judge = [model for model in tied_models 
+                            if abs(judge_scores[model] - max_judge_score) < 0.001]
+        
+        # Award points to winners (split evenly if judge also has a tie)
+        points_per_model = 1.0 / len(winners_for_judge)
+        for model in winners_for_judge:
+            head_to_head_wins[model] += points_per_model
+    
+    max_wins = max(head_to_head_wins.values())
+    tied_models = [model for model in tied_models 
+                   if abs(head_to_head_wins[model] - max_wins) < 0.001]
+    
+    if len(tied_models) == 1:
+        tiebreaker_info["method"] = "head_to_head"
+        tiebreaker_info["tiebreaker_levels_used"].append("head_to_head")
+        print(f"  ✅ Tiebreaker: Head-to-head wins ({max_wins:.2f}) - Winner: {tied_models[0]}")
+        return tied_models[0], tiebreaker_info
+    
+    tiebreaker_info["tiebreaker_levels_used"].append("head_to_head")
+    
+    # Final: Still tied - return first one alphabetically (or could be "multiple winners")
+    # For now, we'll return the first one but mark it as a tie
+    tiebreaker_info["method"] = "alphabetical_fallback"
+    print(f"  ⚠️  Still tied after all tiebreakers - using alphabetical order")
+    print(f"     Final winner: {sorted(tied_models)[0]} (tied with {', '.join(sorted(tied_models)[1:])})")
+    
+    return sorted(tied_models)[0], tiebreaker_info
 
 
 def extract_score(text: str) -> Optional[float]:
@@ -293,8 +429,10 @@ Respond with a JSON object in this exact format:
     step5_duration = time.time() - step5_start
     timing_info["step5_calculate_scores"] = step5_duration
     
-    # Step 6: Determine winner
-    winner = max(average_scores.items(), key=lambda x: x[1])[0]
+    # Step 6: Determine winner with multi-level tiebreaker
+    winner, tiebreaker_info = determine_winner(
+        average_scores, parsed_ratings, responses.keys()
+    )
     
     total_duration = time.time() - start_time
     timing_info["total"] = total_duration
@@ -321,6 +459,7 @@ Respond with a JSON object in this exact format:
         "parsed_ratings": parsed_ratings,
         "average_scores": average_scores,
         "winner": winner,
+        "tiebreaker_info": tiebreaker_info,
         "model_names": model_names,
         "timing_info": timing_info
     }

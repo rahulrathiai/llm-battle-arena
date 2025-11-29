@@ -128,13 +128,17 @@ async def create_battle(
         # Sort by score descending
         response_list.sort(key=lambda x: x["average_score"], reverse=True)
         
+        # Get tiebreaker info if available
+        tiebreaker_info = results.get("tiebreaker_info", {})
+        
         return {
             "id": battle.id,
             "prompt": request.prompt,
             "created_at": battle.created_at.isoformat(),
             "responses": response_list,
             "winner": results["winner"],
-            "winner_display": results["model_names"][results["winner"]]
+            "winner_display": results["model_names"][results["winner"]],
+            "tiebreaker_info": tiebreaker_info
         }
     
     except Exception as e:
