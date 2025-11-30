@@ -547,3 +547,91 @@
   color: var(--error-text);
   font-size: 0.875rem;
 }
+
+/* Screenshot upload styles */
+.screenshot-preview {
+  position: relative;
+  margin: 8px 24px;
+  max-width: 300px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.screenshot-preview img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.remove-screenshot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.remove-screenshot:hover {
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.file-input-hidden {
+  display: none;
+}
+
+.screenshot-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  flex-shrink: 0;
+}
+
+.screenshot-button:hover {
+  background: var(--bg-input);
+  color: var(--accent);
+}
+
+.screenshot-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.screenshot-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Message screenshot display */
+.message-screenshot {
+  margin-bottom: 8px;
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 400px;
+  border: 1px solid var(--border-light);
+}
+
+.message-screenshot img {
+  width: 100%;
+  height: auto;
+  display: block;
+}

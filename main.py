@@ -32,6 +32,7 @@ app.add_middleware(
 class BattleRequest(BaseModel):
     prompt: str
     conversation_history: Optional[List[Dict[str, str]]] = None  # List of {role, content} messages
+    image_data: Optional[str] = None  # Base64 encoded screenshot (data URI format: "data:image/png;base64,...")
 
 
 class BattleResponse(BaseModel):
@@ -59,11 +60,16 @@ async def create_battle(
 ):
     """Run a battle and save results"""
     try:
-        # Run the battle with conversation history for context awareness
-        results = await run_battle(request.prompt, conversation_history=request.conversation_history)
+        print(f"🎯 Battle request received - Prompt length: {len(request.prompt)}, Has image: {bool(request.image_data)}, Image size: {len(request.image_data) if request.image_data else 0}")
+        # Run the battle with conversation history and image data for context awareness
+        results = await run_battle(request.prompt, conversation_history=request.conversation_history, image_data=request.image_data)
         
         # Save to database
-        battle = Battle(prompt=request.prompt, created_at=datetime.utcnow())
+        battle = Battle(
+            prompt=request.prompt, 
+            image_data=request.image_data,
+            created_at=datetime.utcnow()
+        )
         db.add(battle)
         await db.flush()
         
@@ -135,6 +141,7 @@ async def create_battle(
         return {
             "id": battle.id,
             "prompt": request.prompt,
+            "image_data": request.image_data,  # Include image data if present
             "created_at": battle.created_at.isoformat(),
             "responses": response_list,
             "winner": results["winner"],
@@ -144,6 +151,10 @@ async def create_battle(
     
     except Exception as e:
         await db.rollback()
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Battle failed with error: {str(e)}")
+        print(f"Full traceback:\n{error_trace}")
         raise HTTPException(status_code=500, detail=f"Battle failed: {str(e)}")
 
 
@@ -228,6 +239,7 @@ async def get_battle(
     return {
         "id": battle.id,
         "prompt": battle.prompt,
+        "image_data": battle.image_data,  # Include image data if present
         "created_at": battle.created_at.isoformat(),
         "responses": response_data,
         "winner": next((r["model"] for r in response_data if r["is_winner"]), None)

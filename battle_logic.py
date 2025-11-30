@@ -177,7 +177,7 @@ def extract_score(text: str) -> Optional[float]:
     return None
 
 
-async def run_battle(prompt: str, conversation_history: Optional[list] = None) -> Dict:
+async def run_battle(prompt: str, conversation_history: Optional[list] = None, image_data: Optional[str] = None) -> Dict:
     """
     Run a complete battle:
     1. Get responses from all 4 LLMs (with conversation history)
@@ -201,8 +201,8 @@ async def run_battle(prompt: str, conversation_history: Optional[list] = None) -
         # Retry once if the first attempt fails
         for attempt in range(2):
             try:
-                # Pass conversation history to enable context awareness
-                response_text = await client.generate(prompt, conversation_history=conversation_history)
+                # Pass conversation history and image data to enable context awareness
+                response_text = await client.generate(prompt, conversation_history=conversation_history, image_data=image_data)
                 call_duration = time.time() - call_start
                 if attempt > 0:
                     print(f"✅ {client_name} response succeeded on retry ({call_duration:.2f}s)")
@@ -265,6 +265,11 @@ async def run_battle(prompt: str, conversation_history: Optional[list] = None) -
     timing_info["step2_create_prompt"] = step2_duration
     print(f"📊 Step 2 (Create rating prompt): {step2_duration:.2f}s")
     
+    # Build rating prompt with image context if present
+    prompt_context = prompt
+    if image_data:
+        prompt_context = f"{prompt}\n\n[Note: The user also provided a screenshot/image along with this prompt. Please consider how well each response addresses the image content when relevant.]"
+    
     rating_prompt = f"""You are an expert evaluator of LLM responses. I will give you an original prompt and four different responses from different LLMs. Please evaluate each response and provide a score from 0-10 based on:
 - Relevance to the prompt
 - Accuracy and correctness
@@ -273,7 +278,7 @@ async def run_battle(prompt: str, conversation_history: Optional[list] = None) -
 - Overall quality
 
 Original Prompt:
-{prompt}
+{prompt_context}
 
 Responses:
 {chr(10).join(responses_list)}

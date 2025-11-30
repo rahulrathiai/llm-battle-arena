@@ -1,17 +1,20 @@
 import json
 import asyncio
 import httpx
+import base64
+from io import BytesIO
 from typing import Optional
 from config import settings
 import google.generativeai as genai
 from openai import OpenAI
 from anthropic import Anthropic
+from PIL import Image
 
 
 class LLMClient:
     """Base class for LLM clients"""
     
-    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None) -> str:
+    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None, image_data: Optional[str] = None) -> str:
         raise NotImplementedError
 
 
@@ -20,14 +23,35 @@ class OpenAIClient(LLMClient):
         self.client = OpenAI(api_key=settings.openai_api_key)
         self.model = settings.openai_model
     
-    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None) -> str:
+    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None, image_data: Optional[str] = None) -> str:
         try:
             # Build messages array from conversation history + current prompt
             messages = []
             if conversation_history:
                 # Convert history to OpenAI format (already in correct format)
                 messages.extend(conversation_history)
-            messages.append({"role": "user", "content": prompt})
+            
+            # Build user message content
+            user_content = []
+            if image_data:
+                # Extract base64 data from data URI if present
+                if image_data.startswith("data:image/"):
+                    user_content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image_data
+                        }
+                    })
+                else:
+                    # Assume it's just base64, wrap it in data URI
+                    user_content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{image_data}"
+                        }
+                    })
+            user_content.append({"type": "text", "text": prompt})
+            messages.append({"role": "user", "content": user_content})
             
             params = {
                 "model": self.model,
@@ -54,13 +78,51 @@ class AnthropicClient(LLMClient):
         self.client = Anthropic(api_key=settings.anthropic_api_key)
         self.model = settings.anthropic_model
     
-    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None) -> str:
+    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None, image_data: Optional[str] = None) -> str:
         # Build messages array from conversation history + current prompt
         messages = []
         if conversation_history:
             # Convert history to Anthropic format (already in correct format)
             messages.extend(conversation_history)
-        messages.append({"role": "user", "content": prompt})
+        
+        # Build user message content
+        if image_data:
+            # Extract base64 data from data URI if present
+            if image_data.startswith("data:image/"):
+                # Parse data URI: data:image/png;base64,<base64_data>
+                parts = image_data.split(",")
+                if len(parts) == 2:
+                    header = parts[0]  # data:image/png;base64
+                    base64_data = parts[1]
+                    # Extract mime type
+                    mime_type = header.split(":")[1].split(";")[0]  # image/png
+                else:
+                    base64_data = image_data
+                    mime_type = "image/png"  # Default
+            else:
+                base64_data = image_data
+                mime_type = "image/png"  # Default
+            
+            # Anthropic format for images
+            messages.append({
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": mime_type,
+                            "data": base64_data
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
+                ]
+            })
+        else:
+            messages.append({"role": "user", "content": prompt})
         
         params = {
             "model": self.model,
@@ -85,7 +147,7 @@ class GoogleClient(LLMClient):
         except Exception as e:
             raise Exception(f"Failed to initialize Gemini model '{self.model_name}': {str(e)}")
     
-    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None) -> str:
+    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None, image_data: Optional[str] = None) -> str:
         try:
             generation_config = {}
             if json_mode:
@@ -93,6 +155,21 @@ class GoogleClient(LLMClient):
                 generation_config = {
                     "response_mime_type": "application/json"
                 }
+            
+            # Prepare content parts (text + optional image)
+            content_parts = [prompt]
+            if image_data:
+                # Extract base64 data from data URI if present
+                if image_data.startswith("data:image/"):
+                    parts = image_data.split(",")
+                    base64_data = parts[1] if len(parts) == 2 else image_data
+                else:
+                    base64_data = image_data
+                
+                # Convert base64 to PIL Image
+                image_bytes = base64.b64decode(base64_data)
+                image = Image.open(BytesIO(image_bytes))
+                content_parts = [image, prompt]  # Gemini expects image first, then text
             
             # Build conversation history for Google Gemini
             # Gemini uses a chat session with history
@@ -103,20 +180,18 @@ class GoogleClient(LLMClient):
                     role = "user" if msg["role"] == "user" else "model"
                     history.append({
                         "role": role,
-                        "parts": [msg["content"]]
+                        "parts": [msg["content"]]  # Note: history may not include images
                     })
                 
                 # Create a chat session with history
-                # start_chat accepts history as a list of message dicts
                 chat = self.model.start_chat(history=history)
-                # Send current prompt
-                response = await asyncio.to_thread(chat.send_message, prompt)
+                # Send current prompt with image
+                response = await asyncio.to_thread(chat.send_message, content_parts)
             else:
                 # No history - use direct generate_content
-                # Run synchronous Google call in thread pool to allow true async
                 response = await asyncio.to_thread(
                     self.model.generate_content, 
-                    prompt, 
+                    content_parts, 
                     generation_config=generation_config if generation_config else None
                 )
             return response.text
@@ -133,7 +208,12 @@ class GrokClient(LLMClient):
         self.model = settings.grok_model
         self.base_url = "https://api.x.ai/v1"
     
-    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None) -> str:
+    async def generate(self, prompt: str, json_mode: bool = False, conversation_history: Optional[list] = None, image_data: Optional[str] = None) -> str:
+        # Grok/xAI may not support images yet, so skip image for now
+        # If image is provided, just include a note in the prompt
+        if image_data:
+            prompt = f"[Note: An image/screenshot was provided but Grok does not currently support image inputs. Please respond to the text prompt below.]\n\n{prompt}"
+        
         async with httpx.AsyncClient() as client:
             # Try the configured model first
             try:

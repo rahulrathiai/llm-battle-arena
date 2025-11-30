@@ -312,6 +312,11 @@ function BattleResultsTab({ battle, battles, activeChatId, onAddToChat, onBattle
         <>
           <div className="prompt-section">
             <h3>Original Prompt:</h3>
+            {selectedBattle.image_data && (
+              <div className="battle-screenshot">
+                <img src={selectedBattle.image_data} alt="Screenshot" />
+              </div>
+            )}
             <p className="prompt-text">{selectedBattle.prompt}</p>
           </div>
 

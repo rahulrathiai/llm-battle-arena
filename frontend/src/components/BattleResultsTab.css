@@ -114,6 +114,20 @@
   font-size: 0.9rem;
 }
 
+.battle-screenshot {
+  margin-bottom: 16px;
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 600px;
+  border: 1px solid var(--border-light);
+}
+
+.battle-screenshot img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
 .prompt-section {
   margin-bottom: 30px;
   padding: 20px;

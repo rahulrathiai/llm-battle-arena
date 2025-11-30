@@ -21,8 +21,11 @@ function ChatTab({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [screenshotPreview, setScreenshotPreview] = useState(null)  // Preview URL
+  const [screenshotData, setScreenshotData] = useState(null)  // Base64 data URI
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const fileInputRef = useRef(null)
   
   // Always use prop messages for persistence (from parent App component)
   const messages = propMessages || []
@@ -140,18 +143,90 @@ function ChatTab({
     scrollToBottom()
   }, [messages, loading])
 
+  // Handle screenshot file selection
+  const handleScreenshotChange = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type (PNG or JPEG)
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      setError('Please upload a PNG or JPEG screenshot only')
+      e.target.value = '' // Clear input
+      return
+    }
+
+    // Validate file size (5MB max)
+    const maxSize = 5 * 1024 * 1024 // 5MB in bytes
+    if (file.size > maxSize) {
+      setError('Screenshot must be less than 5MB. Please compress or use a smaller image.')
+      e.target.value = '' // Clear input
+      return
+    }
+
+    setError(null)
+
+    // Convert to base64 data URI
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const dataURI = reader.result
+      console.log('📷 Screenshot loaded:', {
+        fileSize: file.size,
+        dataURISize: dataURI.length,
+        type: file.type,
+        previewReady: !!dataURI
+      })
+      setScreenshotData(dataURI)
+      setScreenshotPreview(dataURI) // For preview display
+    }
+    reader.onerror = (error) => {
+      console.error('❌ Failed to read screenshot file:', error)
+      setError('Failed to read screenshot file')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // Remove screenshot
+  const handleRemoveScreenshot = () => {
+    setScreenshotPreview(null)
+    setScreenshotData(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!prompt.trim() || loading) return
+    // Allow submission if there's text OR a screenshot
+    if ((!prompt.trim() && !screenshotData) || loading) return
 
-    const userPrompt = prompt.trim()
+    const userPrompt = prompt.trim() || ''  // Allow empty prompt if screenshot exists
+    const imageToSend = screenshotData
+    
+    console.log('📤 Submitting battle request:', {
+      hasPrompt: !!userPrompt,
+      hasImage: !!imageToSend,
+      promptLength: userPrompt.length,
+      imageSize: imageToSend ? imageToSend.length : 0
+    })
+    
+    // Clear form
     setPrompt('')
+    setScreenshotPreview(null)
+    setScreenshotData(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
     setError(null)
 
     // Add user message - ensure we always work with an array
     setMessages(prev => {
       const currentMessages = prev || []
-      return [...currentMessages, { role: 'user', content: userPrompt }]
+      return [...currentMessages, { 
+        role: 'user', 
+        content: userPrompt,
+        image_data: imageToSend || undefined  // Include image if present
+      }]
     })
     setLoading(true)
 
@@ -180,13 +255,19 @@ function ChatTab({
 
       // Build request payload - only include conversation_history if we have messages
       const requestPayload = { 
-        prompt: userPrompt
+        prompt: userPrompt || 'Analyze this screenshot'  // Default prompt if empty
       }
       if (conversationHistory.length > 0) {
         requestPayload.conversation_history = conversationHistory
       }
+      if (imageToSend) {
+        requestPayload.image_data = imageToSend
+        console.log('📷 Including screenshot in request, size:', imageToSend.length, 'chars')
+      }
       
+      console.log('🚀 Sending battle request to /api/battle')
       const battleResponse = await axios.post('/api/battle', requestPayload)
+      console.log('✅ Received battle response:', battleResponse.data)
       const battleData = battleResponse.data
       
       // Find winner response text
@@ -206,7 +287,14 @@ function ChatTab({
       
       onBattleComplete(battleData)
     } catch (err) {
-      console.error('Error in handleSubmit:', err)
+      console.error('❌ Error in handleSubmit:', err)
+      console.error('Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        hasImage: !!imageToSend,
+        imageSize: imageToSend?.length || 0
+      })
       const errorMsg = err.response?.data?.detail || err.message || 'An error occurred'
       setError(errorMsg)
       setMessages(prev => [...(prev || []), { 
@@ -294,7 +382,14 @@ function ChatTab({
                 <div key={index} className={`message ${message.role}`}>
                   <div className="message-content">
                     {message.role === 'user' ? (
-                      <div className="message-text user-message">{message.content}</div>
+                      <div className="message-text user-message">
+                        {message.image_data && (
+                          <div className="message-screenshot">
+                            <img src={message.image_data} alt="Screenshot" />
+                          </div>
+                        )}
+                        {message.content && <div>{message.content}</div>}
+                      </div>
                     ) : (
                       <div className="message-text assistant-message">
                         <ReactMarkdown 
@@ -336,8 +431,37 @@ function ChatTab({
             </div>
 
             <div className="chat-input-container">
+              {screenshotPreview && (
+                <div className="screenshot-preview">
+                  <img src={screenshotPreview} alt="Screenshot preview" />
+                  <button 
+                    type="button"
+                    className="remove-screenshot"
+                    onClick={handleRemoveScreenshot}
+                    aria-label="Remove screenshot"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
               <form onSubmit={handleSubmit} className="chat-input-form">
                 <div className="input-wrapper">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    onChange={handleScreenshotChange}
+                    className="file-input-hidden"
+                    id="screenshot-upload"
+                    disabled={loading}
+                  />
+                  <label htmlFor="screenshot-upload" className="screenshot-button" title="Upload screenshot (PNG/JPEG, max 5MB)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                      <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                      <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
+                  </label>
                   <textarea
                     ref={inputRef}
                     value={prompt}
@@ -356,7 +480,7 @@ function ChatTab({
                   <button 
                     type="submit" 
                     className="send-button" 
-                    disabled={loading || !prompt.trim()}
+                    disabled={loading || (!prompt.trim() && !screenshotData)}
                     aria-label="Send message"
                   >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

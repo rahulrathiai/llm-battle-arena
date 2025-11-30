@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import text
 from datetime import datetime
 
 Base = declarative_base()
@@ -20,6 +21,7 @@ class Battle(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     prompt = Column(Text, nullable=False)
+    image_data = Column(Text, nullable=True)  # Base64 encoded screenshot (PNG/JPEG)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     responses = relationship("Response", back_populates="battle", cascade="all, delete-orphan")
@@ -57,6 +59,22 @@ class Rating(Base):
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+        # Migration: Add image_data column if it doesn't exist
+        try:
+            # Check if column exists by trying to query it
+            result = await conn.execute(text("PRAGMA table_info(battles)"))
+            columns = [row[1] for row in result.fetchall()]
+            
+            if 'image_data' not in columns:
+                print("🔧 Adding image_data column to battles table (migration)...")
+                await conn.execute(text("ALTER TABLE battles ADD COLUMN image_data TEXT"))
+                print("✅ Successfully migrated database: added image_data column")
+        except Exception as e:
+            # If column already exists or table doesn't exist yet, that's okay
+            error_msg = str(e).lower()
+            if 'duplicate column name' not in error_msg and 'no such table' not in error_msg:
+                print(f"⚠️  Migration note: {e}")
 
 
 async def get_db():
