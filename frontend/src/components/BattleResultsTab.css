@@ -46,6 +46,29 @@
   border-color: var(--accent);
 }
 
+.add-to-chat-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+}
+
+.add-to-chat-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+}
+
+.add-to-chat-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .delete-battle-button {
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   color: white;

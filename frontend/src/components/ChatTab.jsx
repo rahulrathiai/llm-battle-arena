@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect } from 'react'
 import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 import './ChatTab.css'
 
 function ChatTab({ 
@@ -24,6 +27,92 @@ function ChatTab({
   // Always use prop messages for persistence (from parent App component)
   const messages = propMessages || []
   const setMessages = propSetMessages || (() => {})
+  
+  // Preprocess content to convert math blocks to $$ ... $$ format (for remark-math)
+  const preprocessMath = (content) => {
+    if (!content || typeof content !== 'string') return content
+    let processed = content
+    
+    // Protect existing $$ blocks from being modified
+    const protectedBlocks = []
+    let blockIndex = 0
+    processed = processed.replace(/\$\$[\s\S]*?\$\$/g, (match) => {
+      const placeholder = `__PROTECTED_BLOCK_${blockIndex}__`
+      protectedBlocks.push(match)
+      blockIndex++
+      return placeholder
+    })
+    
+    // FIRST: Fix malformed math expressions that are missing opening delimiters
+    // Handle: "> \frac{...} $$" or "\frac{...} $$" → "$$\frac{...}$$"
+    // Use greedy matching to capture entire LaTeX expression including nested braces
+    
+    // Pattern: match from backslash command to $$ (greedy, captures everything including nested braces)
+    processed = processed.replace(/(^>\s*|^)(\\[a-zA-Z]+[^$]*?)\s*\$\$/gm, (match, prefix, mathExpr) => {
+      // Only process if it looks like LaTeX math (contains backslash command)
+      if (/\\[a-zA-Z]+/.test(mathExpr)) {
+        // Remove blockquote marker if present
+        if (prefix.includes('>')) {
+          return `$$${mathExpr}$$`
+        }
+        return `$$${mathExpr}$$`
+      }
+      return match
+    })
+    
+    // First, convert complete \[ ... \] blocks to $$ ... $$
+    processed = processed.replace(/\\\[([\s\S]*?)\\\]/g, '$$$1$$')
+    
+    // Handle incomplete \[ blocks (missing closing \])
+    processed = processed.replace(/\\\[([\s\S]*?)(?:\n\n|$)/g, (match, inner) => {
+      if (/\\[a-zA-Z]+/.test(inner)) {
+        return `$$${inner}$$`
+      }
+      return match
+    })
+    
+    // Convert multi-line $ blocks that should be block math
+    // Only convert if they span multiple lines or are clearly block math
+    processed = processed.replace(/\$\s*([\s\S]+?)\s*\$/g, (match, inner) => {
+      // Skip if it's already protected or doesn't contain LaTeX
+      if (!/\\[a-zA-Z]+/.test(inner)) return match
+      
+      // Convert to block math if it has newlines, multiple fractions, or is long
+      if (inner.includes('\n') || (inner.match(/\\frac/g) || []).length > 1 || inner.length > 100) {
+        return `$$${inner}$$`
+      }
+      return match
+    })
+    
+    // Convert inline math in parentheses like (T_{\text{math}}) = at start of lines
+    processed = processed.replace(/^\(([A-Za-z_]+)_{\\text\{[^}]+\}}\)\s*=/gm, (match) => {
+      const mathContent = match.replace(/^\(/, '').replace(/\)\s*=$/, '')
+      return `\\(${mathContent}\\) =`
+    })
+    
+    // Handle standalone math expressions in parentheses like (N \to \infty)
+    processed = processed.replace(/\(([A-Za-z]+)\s*\\to\s*\\infty\)/g, (match) => {
+      return match.replace(/^\(/, '\\(').replace(/\)$/, '\\)')
+    })
+    
+    // Convert [ ... ] blocks that contain LaTeX commands to $$ ... $$
+    processed = processed.replace(/\[\s*((?:[^\]]|\\\])+?)\s*\]/g, (match, inner) => {
+      if (/\\[a-zA-Z]+\{/.test(inner) || /\\[a-zA-Z]+/.test(inner)) {
+        return `$$${inner}$$`
+      }
+      return match
+    })
+    
+    // Fix orphaned $$ markers - remove standalone $$ that appear alone (not between math)
+    processed = processed.replace(/\s*\$\$\s+([A-Za-z])/g, ' $1')
+    
+    // Restore protected blocks
+    protectedBlocks.forEach((block, index) => {
+      processed = processed.replace(`__PROTECTED_BLOCK_${index}__`, block)
+    })
+    
+    return processed
+  }
   
   // Sort chat sessions by updatedAt (most recent first)
   const sortedChatSessions = [...chatSessions].sort((a, b) => b.updatedAt - a.updatedAt)
@@ -67,13 +156,27 @@ function ChatTab({
     setLoading(true)
 
     try {
-      // Build conversation history from previous messages (only winning responses are stored)
+      // Build conversation history from previous messages in THIS chat session only
       // Format: [{role: 'user', content: '...'}, {role: 'assistant', content: '...'}]
-      // Note: messages array already only contains winning responses, so we can use all of them
+      // Note: messages array comes from activeChatMessages which is already filtered to the active chat
       const conversationHistory = (messages || []).map(msg => ({
         role: msg.role,
         content: msg.content
       }))
+      
+      // Debug logging to verify context isolation
+      if (conversationHistory.length > 0) {
+        const battleIds = messages
+          .filter(m => m.battleId)
+          .map(m => m.battleId)
+          .sort((a, b) => a - b)
+        console.log(`📝 Conversation context for chat "${activeChatId}":`, {
+          chatId: activeChatId,
+          totalMessages: conversationHistory.length,
+          battleIdsInThisChat: battleIds.length > 0 ? battleIds : 'none',
+          willIncludeInContext: battleIds.length > 0 ? `Battles ${battleIds.join(', ')}` : 'none'
+        })
+      }
 
       // Build request payload - only include conversation_history if we have messages
       const requestPayload = { 
@@ -194,8 +297,11 @@ function ChatTab({
                       <div className="message-text user-message">{message.content}</div>
                     ) : (
                       <div className="message-text assistant-message">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {message.content}
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm, remarkMath]} 
+                          rehypePlugins={[rehypeKatex]}
+                        >
+                          {preprocessMath(message.content)}
                         </ReactMarkdown>
                         {message.battleId && onNavigateToResults && (
                           <div className="view-details-link">

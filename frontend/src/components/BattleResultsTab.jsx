@@ -2,13 +2,134 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 import './BattleResultsTab.css'
 
-function BattleResultsTab({ battle, battles, onBattleDeleted }) {
+function BattleResultsTab({ battle, battles, activeChatId, onAddToChat, onBattleDeleted }) {
   const [selectedBattle, setSelectedBattle] = useState(battle)
   const [allBattles, setAllBattles] = useState([])
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  
+  // Load chat sessions to check if battle is already in a chat
+  const [chatSessions, setChatSessions] = useState([])
+  
+  // Preprocess content to convert math blocks to $$ ... $$ format (for remark-math)
+  const preprocessMath = (content) => {
+    if (!content || typeof content !== 'string') return content
+    let processed = content
+    
+    // Step 1: Protect existing $$ blocks from being modified
+    const protectedBlocks = []
+    let blockIndex = 0
+    processed = processed.replace(/\$\$[\s\S]*?\$\$/g, (match) => {
+      const placeholder = `__MATH_BLOCK_${blockIndex}__`
+      protectedBlocks.push(match)
+      blockIndex++
+      return placeholder
+    })
+    
+    // Step 2: Protect existing $ inline math (single dollar)
+    const protectedInline = []
+    let inlineIndex = 0
+    processed = processed.replace(/\$[^\$\n]+?\$/g, (match) => {
+      // Only protect if it's not multi-line and looks like complete inline math
+      if (!match.includes('\n') && match.length < 100) {
+        const placeholder = `__MATH_INLINE_${inlineIndex}__`
+        protectedInline.push(match)
+        inlineIndex++
+        return placeholder
+      }
+      return match
+    })
+    
+    // Step 3: Convert complete \[ ... \] blocks to $$ ... $$
+    processed = processed.replace(/\\\[([\s\S]*?)\\\]/g, '$$$1$$')
+    
+    // Step 4: Handle incomplete \[ blocks (missing closing \])
+    processed = processed.replace(/\\\[([\s\S]*?)(?:\n\n|$)/g, (match, inner) => {
+      if (/\\[a-zA-Z]+/.test(inner)) {
+        return `$$${inner}$$`
+      }
+      return match
+    })
+    
+    // Step 5: Convert multi-line $ blocks that should be block math
+    processed = processed.replace(/\$\s*([\s\S]+?)\s*\$/g, (match, inner) => {
+      if (!/\\[a-zA-Z]+/.test(inner)) return match
+      if (inner.includes('\n') || (inner.match(/\\frac/g) || []).length > 1 || inner.length > 100) {
+        return `$$${inner}$$`
+      }
+      return match
+    })
+    
+    // Step 6: Convert inline math in parentheses like (T_{\text{math}}) = at start of lines
+    processed = processed.replace(/^\(([A-Za-z_]+)_{\\text\{[^}]+\}}\)\s*=/gm, (match) => {
+      const mathContent = match.replace(/^\(/, '').replace(/\)\s*=$/, '')
+      return `\\(${mathContent}\\) =`
+    })
+    
+    // Step 7: Handle standalone math expressions in parentheses like (N \to \infty)
+    processed = processed.replace(/\(([A-Za-z]+)\s*\\to\s*\\infty\)/g, (match) => {
+      return match.replace(/^\(/, '\\(').replace(/\)$/, '\\)')
+    })
+    
+    // Step 8: Convert [ ... ] blocks that contain LaTeX commands to $$ ... $$
+    processed = processed.replace(/\[\s*((?:[^\]]|\\\])+?)\s*\]/g, (match, inner) => {
+      if (/\\[a-zA-Z]+\{/.test(inner) || /\\[a-zA-Z]+/.test(inner)) {
+        return `$$${inner}$$`
+      }
+      return match
+    })
+    
+    // Step 9: Restore protected blocks
+    protectedInline.forEach((block, index) => {
+      processed = processed.replace(`__MATH_INLINE_${index}__`, block)
+    })
+    protectedBlocks.forEach((block, index) => {
+      processed = processed.replace(`__MATH_BLOCK_${index}__`, block)
+    })
+    
+    return processed
+  }
+  
+  useEffect(() => {
+    const saved = localStorage.getItem('chatSessions')
+    if (saved) {
+      try {
+        setChatSessions(JSON.parse(saved))
+      } catch (e) {
+        console.error('Error loading chat sessions:', e)
+      }
+    }
+  }, [])
+  
+  // Check if battle is already in the current active chat
+  const isBattleInChat = (battleId) => {
+    if (!activeChatId) return false
+    const activeChat = chatSessions.find(session => session.id === activeChatId)
+    if (!activeChat || !activeChat.messages) return false
+    return activeChat.messages.some(msg => msg.battleId === battleId)
+  }
+  
+  const handleAddToChat = () => {
+    if (selectedBattle && onAddToChat) {
+      onAddToChat(selectedBattle)
+      // Reload chat sessions after a short delay to update the check
+      setTimeout(() => {
+        const saved = localStorage.getItem('chatSessions')
+        if (saved) {
+          try {
+            setChatSessions(JSON.parse(saved))
+          } catch (e) {
+            console.error('Error reloading chat sessions:', e)
+          }
+        }
+      }, 200)
+    }
+  }
 
   const loadBattles = async () => {
     try {
@@ -161,14 +282,26 @@ function BattleResultsTab({ battle, battles, onBattleDeleted }) {
             ))}
           </select>
           {selectedBattle && (
-            <button
-              className="delete-battle-button"
-              onClick={() => handleDeleteBattle(selectedBattle.id)}
-              disabled={deleting || loading}
-              title="Delete this battle"
-            >
-              {deleting ? 'Deleting...' : '🗑️ Delete'}
-            </button>
+            <>
+              {onAddToChat && !isBattleInChat(selectedBattle.id) && (
+                <button
+                  className="add-to-chat-button"
+                  onClick={handleAddToChat}
+                  disabled={loading}
+                  title="Add this battle to your current chat"
+                >
+                  💬 Add to Chat
+                </button>
+              )}
+              <button
+                className="delete-battle-button"
+                onClick={() => handleDeleteBattle(selectedBattle.id)}
+                disabled={deleting || loading}
+                title="Delete this battle"
+              >
+                {deleting ? 'Deleting...' : '🗑️ Delete'}
+              </button>
+            </>
           )}
         </div>
       )}
@@ -238,8 +371,11 @@ function BattleResultsTab({ battle, battles, onBattleDeleted }) {
                 </div>
 
                 <div className="response-text">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {response.text}
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm, remarkMath]} 
+                    rehypePlugins={[rehypeKatex]}
+                  >
+                    {preprocessMath(response.text)}
                   </ReactMarkdown>
                 </div>
               </div>

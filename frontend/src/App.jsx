@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import ChatTab from './components/ChatTab'
 import BattleResultsTab from './components/BattleResultsTab'
 import StatsTab from './components/StatsTab'
@@ -48,6 +48,8 @@ function App() {
     const saved = localStorage.getItem('activeChatId')
     return saved || null
   })
+  // Track pending new chat ID to avoid creating duplicate chats during rapid updates
+  const pendingChatIdRef = useRef(null)
   const { theme, toggleTheme } = useTheme()
   
   // Get active chat messages
@@ -91,45 +93,93 @@ function App() {
     setActiveChatId(chatId)
   }
   
-  const handleUpdateChatMessages = (messages) => {
-    // Ensure messages is always an array
-    const messagesArray = Array.isArray(messages) ? messages : []
+  const handleUpdateChatMessages = (messagesOrUpdater) => {
+    // Check if we have an active chat or a pending one
+    const effectiveChatId = activeChatId || pendingChatIdRef.current
+    const needsNewChat = !effectiveChatId
     
-    if (!activeChatId) {
-      // If no active chat, create a new one with the messages
-      const firstUserMessage = messagesArray.find(m => m.role === 'user')
-      const title = firstUserMessage ? firstUserMessage.content.substring(0, 50).trim() || 'New Chat' : 'New Chat'
+    // Use functional update to always work with latest state
+    setChatSessions(prevSessions => {
+      // Support both direct array and updater function (like React setState)
+      let messagesArray
       
-      const newChat = {
-        id: Date.now().toString(),
-        title: title,
-        messages: messagesArray,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
+      if (typeof messagesOrUpdater === 'function') {
+        // It's an updater function - get current messages from the latest chat sessions
+        if (needsNewChat) {
+          // No active chat - start with empty array
+          const updatedMessages = messagesOrUpdater([])
+          messagesArray = Array.isArray(updatedMessages) ? updatedMessages : []
+        } else {
+          // Get current messages from active or pending chat
+          const targetChatId = effectiveChatId
+          const currentActiveChat = prevSessions.find(c => c.id === targetChatId)
+          const currentMessages = (currentActiveChat && Array.isArray(currentActiveChat.messages)) 
+            ? currentActiveChat.messages 
+            : []
+          const updatedMessages = messagesOrUpdater(currentMessages)
+          messagesArray = Array.isArray(updatedMessages) ? updatedMessages : []
+        }
+      } else {
+        // It's a direct array
+        messagesArray = Array.isArray(messagesOrUpdater) ? messagesOrUpdater : []
       }
-      setChatSessions([newChat, ...chatSessions])
-      setActiveChatId(newChat.id)
-      return
-    }
-    
-    setChatSessions(prev => prev.map(chat => {
-      if (chat.id === activeChatId) {
-        const updatedChat = {
-          ...chat,
+      
+      if (needsNewChat) {
+        // If no active chat, create a new one with the messages
+        // Use pending chat ID if one exists (from a previous rapid update)
+        const newChatId = pendingChatIdRef.current || Date.now().toString()
+        pendingChatIdRef.current = newChatId
+        
+        const firstUserMessage = messagesArray.find(m => m.role === 'user')
+        const title = firstUserMessage ? firstUserMessage.content.substring(0, 50).trim() || 'New Chat' : 'New Chat'
+        
+        // Check if chat already exists (from previous rapid update)
+        const existingChat = prevSessions.find(c => c.id === newChatId)
+        if (existingChat) {
+          // Update existing chat instead of creating new one
+          return prevSessions.map(chat => 
+            chat.id === newChatId 
+              ? { ...chat, messages: messagesArray, updatedAt: Date.now() }
+              : chat
+          )
+        }
+        
+        const newChat = {
+          id: newChatId,
+          title: title,
           messages: messagesArray,
+          createdAt: Date.now(),
           updatedAt: Date.now()
         }
-        // Auto-generate title from first user message if it's still "New Chat"
-        if (updatedChat.title === 'New Chat' && messagesArray.length > 0) {
-          const firstUserMessage = messagesArray.find(m => m.role === 'user')
-          if (firstUserMessage) {
-            updatedChat.title = firstUserMessage.content.substring(0, 50).trim() || 'New Chat'
-          }
-        }
-        return updatedChat
+        // Set active chat ID immediately
+        setActiveChatId(newChatId)
+        // Clear pending ref after a short delay
+        setTimeout(() => { pendingChatIdRef.current = null }, 1000)
+        return [newChat, ...prevSessions]
       }
-      return chat
-    }))
+      
+      // Clear pending ref if we have an active chat
+      pendingChatIdRef.current = null
+      
+      return prevSessions.map(chat => {
+        if (chat.id === effectiveChatId) {
+          const updatedChat = {
+            ...chat,
+            messages: messagesArray,
+            updatedAt: Date.now()
+          }
+          // Auto-generate title from first user message if it's still "New Chat"
+          if (updatedChat.title === 'New Chat' && messagesArray.length > 0) {
+            const firstUserMessage = messagesArray.find(m => m.role === 'user')
+            if (firstUserMessage) {
+              updatedChat.title = firstUserMessage.content.substring(0, 50).trim() || 'New Chat'
+            }
+          }
+          return updatedChat
+        }
+        return chat
+      })
+    })
   }
 
   const tabs = [
@@ -186,6 +236,34 @@ function App() {
             key="battle-results" 
             battle={currentBattle} 
             battles={battles}
+            activeChatId={activeChatId}
+            onAddToChat={(battleData) => {
+              // Get winner response
+              const winnerResponse = battleData.responses.find(r => r.is_winner) || battleData.responses[0]
+              if (!winnerResponse) return
+              
+              // Prepare new messages
+              const userMessage = { role: 'user', content: battleData.prompt }
+              const assistantMessage = { 
+                role: 'assistant', 
+                content: winnerResponse.text, 
+                battleId: battleData.id 
+              }
+              
+              if (!activeChatId) {
+                // Create new chat with the battle messages
+                const newMessages = [userMessage, assistantMessage]
+                handleUpdateChatMessages(newMessages)
+              } else {
+                // Add to existing chat - check if already exists
+                const currentMessages = activeChatMessages || []
+                const alreadyExists = currentMessages.some(msg => msg.battleId === battleData.id)
+                if (!alreadyExists) {
+                  const newMessages = [...currentMessages, userMessage, assistantMessage]
+                  handleUpdateChatMessages(newMessages)
+                }
+              }
+            }}
             onBattleDeleted={() => {
               // Refresh stats when a battle is deleted
               setStatsRefreshKey(prev => prev + 1)
